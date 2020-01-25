@@ -17,6 +17,9 @@
       </list>
     </option>
   </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
   <component name="ProjectId" id="1WrfMmX43Erog29BrDH5HjmWCl2" />
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
@@ -25,8 +28,8 @@
   </component>
   <component name="PropertiesComponent">
     <property name="RunOnceActivity.ShowReadmeOnStart" value="true" />
-    <property name="last_opened_file_path" value="$PROJECT_DIR$" />
-    <property name="settings.editor.selected.configurable" value="configurable.group.tools" />
+    <property name="last_opened_file_path" value="$PROJECT_DIR$/venv" />
+    <property name="settings.editor.selected.configurable" value="com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable" />
   </component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
@@ -75,14 +78,18 @@
     <servers />
   </component>
   <component name="WindowStateProjectService">
+    <state x="504" y="266" key="#com.intellij.execution.impl.EditConfigurationsDialog" timestamp="1579982854581">
+      <screen x="0" y="0" width="1920" height="1040" />
+    </state>
+    <state x="504" y="266" key="#com.intellij.execution.impl.EditConfigurationsDialog/0.0.1920.1040@0.0.1920.1040" timestamp="1579982854581" />
     <state x="915" y="588" key="#com.intellij.ide.actions.ChooseComponentsToExportDialog" timestamp="1579970192199">
       <screen x="0" y="0" width="1920" height="1040" />
     </state>
     <state x="915" y="588" key="#com.intellij.ide.actions.ChooseComponentsToExportDialog/0.0.1920.1040@0.0.1920.1040" timestamp="1579970192199" />
-    <state x="740" y="275" key="FileChooserDialogImpl" timestamp="1579912823939">
+    <state x="740" y="275" key="FileChooserDialogImpl" timestamp="1579981531038">
       <screen x="0" y="0" width="1920" height="1040" />
     </state>
-    <state x="740" y="275" key="FileChooserDialogImpl/0.0.1920.1040@0.0.1920.1040" timestamp="1579912823939" />
+    <state x="740" y="275" key="FileChooserDialogImpl/0.0.1920.1040@0.0.1920.1040" timestamp="1579981531038" />
     <state width="1899" height="276" key="GridCell.Tab.0.bottom" timestamp="1579980574361">
       <screen x="0" y="0" width="1920" height="1040" />
     </state>
@@ -115,13 +122,13 @@
       <screen x="0" y="0" width="1920" height="1040" />
     </state>
     <state width="1899" height="276" key="GridCell.Tab.1.right/0.0.1920.1040@0.0.1920.1040" timestamp="1579980574362" />
-    <state x="461" y="163" key="SettingsEditor" timestamp="1579970278921">
+    <state x="392" y="226" key="SettingsEditor" timestamp="1579981569924">
       <screen x="0" y="0" width="1920" height="1040" />
     </state>
-    <state x="461" y="163" key="SettingsEditor/0.0.1920.1040@0.0.1920.1040" timestamp="1579970278921" />
-    <state x="661" y="345" key="com.intellij.ide.util.TipDialog" timestamp="1579912610818">
+    <state x="392" y="226" key="SettingsEditor/0.0.1920.1040@0.0.1920.1040" timestamp="1579981569924" />
+    <state x="661" y="345" key="com.intellij.ide.util.TipDialog" timestamp="1579980928644">
       <screen x="0" y="0" width="1920" height="1040" />
     </state>
-    <state x="661" y="345" key="com.intellij.ide.util.TipDialog/0.0.1920.1040@0.0.1920.1040" timestamp="1579912610818" />
+    <state x="661" y="345" key="com.intellij.ide.util.TipDialog/0.0.1920.1040@0.0.1920.1040" timestamp="1579980928644" />
   </component>
 </project>

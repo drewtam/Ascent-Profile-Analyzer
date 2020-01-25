@@ -11,38 +11,41 @@ exhaust_flow = 0.1  # kg/s, user set parameter from the rocket design
 radius_planet = 600000  # meters, user set parameter from the planet of origin (Kerbal is 600km)
 mass_planet = 5.2915158 * (10^22)  # kg, user set parameter from the planet of origin (Kerbal is 5.2915158e22 kg)
 initial_pressure = 101.3  # kPa, atmospheric initial pressure, user set parameter from the planet of origin
-scale_height = 5600  # meters, atmospheric pressure constant of KSP's atmosphere model, user set parameter from the planet of origin
-temperature = 293  # Kelvin, atmospheric temperature, user set parameter from the planet of origin (Kerbal is 20C at ground)
-top_of_atmosphere = 70000 # meters, highest altitude that atmosphere affects flight & drag, user set parameter from the planet of origin (Kerbal is 70km)
+scale_height = 5600
+# meters, atmospheric pressure constant of KSP's atmosphere model, user set parameter from the planet of origin
+temperature = 293
+# Kelvin, atmospheric temperature, user set parameter from the planet of origin (Kerbal is 20C at ground)
+top_of_atmosphere = 70000
+# meters, highest altitude that atmosphere affects flight & drag, user set parameter from the planet of origin (Kerbal is 70km)
 
-delta_time = 0.01  # seconds, time step, Controls simulation accuracy vs computational cost. ???maybe a user set parameter??? ???maybe dynamically generated based on velocity or some other error calc???
+delta_time: float = 0.01  # seconds, time step, Controls simulation accuracy vs computational cost. ???maybe a user set parameter??? ???maybe dynamically generated based on velocity or some other error calc???
 
 flight_plan_altitude = [3000, 12000, 20000, 30000, 80000]  # meters, flight plan altitude points, user set values for their launch plan
 flight_plan_attitude = [85, 72, 40, 30, 5, 0]  # degrees, flight plan attitude, user set values for their launch plan
 
-current_time = 0.00  # seconds, simulation time, initialization
+current_time: float = 0.00  # seconds, simulation time, initialization
 
-x_pos = 0  # meters, cartesian position of the vehicle relative to planet center (origin), initialization
-y_pos = radius_planet  # meters, cartesian position of the vehicle relative to planet center (origin), initialization
+x_pos: float = 0  # meters, cartesian position of the vehicle relative to planet center (origin), initialization
+y_pos: float = radius_planet  # meters, cartesian position of the vehicle relative to planet center (origin), initialization
 
 alpha_pos = pi / 2  #radians, angular position of the vehicle relative to planet center (origin), initialization
 radius_pos = radius_planet  # meters, radial position of the vehicle from planet center (origin), initialization
 
-x_velocity = 0 # m/s, cartesian velocity of the vehicle, initialization
-y_velocity = 0 # m/s, cartesian velocity of the vehicle, initialization
+x_velocity: float = 0.00 # m/s, cartesian velocity of the vehicle, initialization
+y_velocity: float = 0.00 # m/s, cartesian velocity of the vehicle, initialization
 
 target_apoapsis = flight_plan_altitude[len(flight_plan_altitude)]
 
-
-def tangential_velocity(Vx, Vy, alpha):
+def tangential_velocity(vx, vy):
     # m/s, calculates velocity perpendicular to the position vector, assumes planar motion
-    # Vx = x velocity, Vy = y velocity, alpha = alpha_pos
-    return Vx * sin(alpha) + Vy * cos(alpha)
+    # Vx = x velocity, Vy = y velocity, alpha = angular position
+    alpha = angular_position(x_pos, y_pos)
+    return vx * sin(alpha) + vy * cos(alpha)
 
-def radial_velocity(Vx, Vy, alpha):
+def radial_velocity(vx, vy, alpha):
     # m/s, calculates velocity co-linear to the position vector, assumes planar motion
     # Vx = x velocity, Vy = y velocity, alpha = alpha_pos
-    return Vx * cos(alpha) + Vy * sin(alpha)
+    return vx * cos(alpha) + vy * sin(alpha)
 
 def altitude():
     # meters, calculates current altitude from the radial position
@@ -85,21 +88,21 @@ def radial_position(x, y):
 
 def thrust():
     # Newtons, turns engine thrust on/off based on calculated apoapsis. Burn engine until target apoapsis is expected, prevents overshoot.
-    if apoapsis >= target_apoapsis
+    if apoapsis_altitude() >= target_apoapsis:
         return 0
-    else
+    else:
         return engine_thrust
 
-def velocity(Vx, Vy):
-    return sqrt(Vx^2 + Vy^2)
+def velocity(vx, vy):
+    return sqrt(vx^2 + vy^2)
 
-def orbital_energy(m, V, r):
+def orbital_energy(m, v, r):
     # kg * m^2 / s^2, returns conserved orbital energy (euler? lagrangian? can't remember the technical term), requires vehicle mass, scalar velocity, and radial position
-    return 1/2 * m * V^2 - gravity_const * mass_planet * m / r
+    return 1/2 * m * v^2 - gravity_const * mass_planet * m / r
 
-def angular_momentum(r, Vt, m):
+def angular_momentum(r, vt, m):
     # kg*m^2/s, returns orbital angular momentum, requires radial position, tangential velocity, and vehicle mass
-    return r * Vt * m
+    return r * vt * m
 
 def reduced_mass(m):
     # kg, effective mass in two body newtonian mechanics
@@ -107,9 +110,9 @@ def reduced_mass(m):
 
 def new_vehicle_mass():
     # kg, returns an adjusted vehicle mass for a small time step
-    if thrust() > 0
+    if thrust() > 0:
         return mass_vehicle - exhaust_flow * delta_time
-    else
+    else:
         return mass_vehicle
 
 def central_force():
@@ -123,7 +126,8 @@ def eccentricity():
     v = velocity(x_velocity, y_velocity)
     r = radial_position(x_pos, y_pos)
     f = central_force()
-    return sqrt(1 + 2 * orbital_energy(m, v, r) * (angular_momentum(r, Vt, m))^2 / (mr * f^2))
+    vt = tangential_velocity(x_velocity, y_velocity)
+    return sqrt(1 + 2 * orbital_energy(m, v, r) * (angular_momentum(r, vt, m))^2 / (mr * f^2))
 
 def semi_major_axis(v, r):
     # meters, returns the radius of the semi major axis of the vehicle orbit around the planet, requires scalar velocity and radial position
@@ -131,14 +135,16 @@ def semi_major_axis(v, r):
 
 def apoapsis_total():
     # meters, returns the radius of the orbital apoapsis
-    v = velocity(x_velocity, y_velocity)
-    r = radial_position(x_pos, y_pos)
+    v: float = velocity(x_velocity, y_velocity)
+    r: float = radial_position(x_pos, y_pos)
     sma = semi_major_axis(v, r)
     ecc = eccentricity()
     return sma * (1 + abs(ecc))
 
-def apoapsis_minor():
+def apoapsis_altitude():
     # meters, returns the radius minus the planetary diameter (alititude of the apoapsis)
+    return apoapsis_total()-radius_planet
+
 # force_x_N = thrust * cos(attitude_rad - alpha_pos + pi / 2) - force_drag * cos(acos()
 # velocity_ms = 0
 
@@ -156,7 +162,7 @@ def apoapsis_minor():
 # record initial conditions
 
 # Begin main loop
-while apoapsis <= target_ap and altitude() <= top_of_atmosphere:
+# while apoapsis <= target_ap and altitude() <= top_of_atmosphere:
     # increment time step
     # increment new states
     # store new states
