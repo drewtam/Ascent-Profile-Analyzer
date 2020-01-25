@@ -11,12 +11,9 @@ exhaust_flow = 0.1  # kg/s, user set parameter from the rocket design
 radius_planet = 600000  # meters, user set parameter from the planet of origin (Kerbal is 600km)
 mass_planet = 5.2915158 * (10^22)  # kg, user set parameter from the planet of origin (Kerbal is 5.2915158e22 kg)
 initial_pressure = 101.3  # kPa, atmospheric initial pressure, user set parameter from the planet of origin
-scale_height = 5600
-# meters, atmospheric pressure constant of KSP's atmosphere model, user set parameter from the planet of origin
-temperature = 293
-# Kelvin, atmospheric temperature, user set parameter from the planet of origin (Kerbal is 20C at ground)
-top_of_atmosphere = 70000
-# meters, highest altitude that atmosphere affects flight & drag, user set parameter from the planet of origin (Kerbal is 70km)
+scale_height = 5600  # meters, atmospheric pressure constant of KSP's atmosphere model, user set parameter from the planet of origin
+temperature = 293  # Kelvin, atmospheric temperature, user set parameter from the planet of origin (Kerbal is 20C at ground)
+top_of_atmosphere = 70000 # meters, highest altitude that atmosphere affects flight & drag, user set parameter from the planet of origin (Kerbal is 70km)
 
 delta_time: float = 0.01  # seconds, time step, Controls simulation accuracy vs computational cost. ???maybe a user set parameter??? ???maybe dynamically generated based on velocity or some other error calc???
 
