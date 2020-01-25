@@ -3,7 +3,7 @@ from math import *
 gravity_const = 6.6743 * (10^-11)  # m^3/kg/s^2, universal gravitational constant
 gas_const = 0.287053  # kJ/kg/K, universal gas constant
 
-thrust = 2000  # kN, engine thrust, user set parameter from the rocket design
+engine_thrust = 2000  # N, engine thrust, user set parameter from the rocket design
 drag_coefficient = 0.05  # m^2, drag coefficient "Cd * Area", user set parameter from the rocket design
 mass_vehicle = 100  # kg, user set parameter from the rocket design
 exhaust_flow = 0.1  # kg/s, user set parameter from the rocket design
@@ -15,7 +15,7 @@ scale_height = 5600  # meters, atmospheric pressure constant of KSP's atmosphere
 temperature = 293  # Kelvin, atmospheric temperature, user set parameter from the planet of origin (Kerbal is 20C at ground)
 top_of_atmosphere = 70000 # meters, highest altitude that atmosphere affects flight & drag, user set parameter from the planet of origin (Kerbal is 70km)
 
-delta_time = 0.01  # seconds, time step, ???maybe a user set parameter??? Controls simulation accuracy vs computational speed. ???maybe dynamically generated based on velocity or some other error calc???
+delta_time = 0.01  # seconds, time step, Controls simulation accuracy vs computational cost. ???maybe a user set parameter??? ???maybe dynamically generated based on velocity or some other error calc???
 
 flight_plan_altitude = [3000, 12000, 20000, 30000, 80000]  # meters, flight plan altitude points, user set values for their launch plan
 flight_plan_attitude = [85, 72, 40, 30, 5, 0]  # degrees, flight plan attitude, user set values for their launch plan
@@ -30,6 +30,9 @@ radius_pos = radius_planet  # meters, radial position of the vehicle from planet
 
 x_velocity = 0 # m/s, cartesian velocity of the vehicle, initialization
 y_velocity = 0 # m/s, cartesian velocity of the vehicle, initialization
+
+target_apoapsis = flight_plan_altitude[len(flight_plan_altitude)]
+
 
 def tangential_velocity(Vx, Vy, alpha):
     # m/s, calculates velocity perpendicular to the position vector, assumes planar motion
@@ -71,25 +74,84 @@ def air_density():
     return air_pressure() / (gas_const * temperature)
 
 
-#def angular_position(alpha_pos):
- #   alpha_pos = atan(y_pos / x_pos)  # update radial position from cartesian coordinates
+def angular_position(x, y):
+    # radians, calculates angular position from cartesian coordinates, assumes planar position
+    return atan(y / x)
 
 
-force_x_N = thrust * cos(attitude_rad - alpha_pos + pi / 2) - force_drag * cos(acos()
-velocity_ms = 0
+def radial_position(x, y):
+    # meters, calculates radial position from cartesian coordinates, assumes planar position
+    return sqrt(x^2 + y^2)
+
+def thrust():
+    # Newtons, turns engine thrust on/off based on calculated apoapsis. Burn engine until target apoapsis is expected, prevents overshoot.
+    if apoapsis >= target_apoapsis
+        return 0
+    else
+        return engine_thrust
+
+def velocity(Vx, Vy):
+    return sqrt(Vx^2 + Vy^2)
+
+def orbital_energy(m, V, r):
+    # kg * m^2 / s^2, returns conserved orbital energy (euler? lagrangian? can't remember the technical term), requires vehicle mass, scalar velocity, and radial position
+    return 1/2 * m * V^2 - gravity_const * mass_planet * m / r
+
+def angular_momentum(r, Vt, m):
+    # kg*m^2/s, returns orbital angular momentum, requires radial position, tangential velocity, and vehicle mass
+    return r * Vt * m
+
+def reduced_mass(m):
+    # kg, effective mass in two body newtonian mechanics
+    return mass_planet * m / (mass_planet + m)
+
+def new_vehicle_mass():
+    # kg, returns an adjusted vehicle mass for a small time step
+    if thrust() > 0
+        return mass_vehicle - exhaust_flow * delta_time
+    else
+        return mass_vehicle
+
+def central_force():
+    # kg * m^3 / s^2, returns the scalar force value for the planetary gravity, without direction or distance
+    return gravity_const * mass_planet * mass_vehicle
+
+def eccentricity():
+    # unitless, returns the orbital eccentricity of the vehicle around the planet
+    m = mass_vehicle
+    mr = reduced_mass(m)
+    v = velocity(x_velocity, y_velocity)
+    r = radial_position(x_pos, y_pos)
+    f = central_force()
+    return sqrt(1 + 2 * orbital_energy(m, v, r) * (angular_momentum(r, Vt, m))^2 / (mr * f^2))
+
+def semi_major_axis(v, r):
+    # meters, returns the radius of the semi major axis of the vehicle orbit around the planet, requires scalar velocity and radial position
+    return -gravity_const * mass_planet / (2 * (v^2 / 2 - gravity_const * mass_planet / r))
+
+def apoapsis_total():
+    # meters, returns the radius of the orbital apoapsis
+    v = velocity(x_velocity, y_velocity)
+    r = radial_position(x_pos, y_pos)
+    sma = semi_major_axis(v, r)
+    ecc = eccentricity()
+    return sma * (1 + abs(ecc))
+
+def apoapsis_minor():
+    # meters, returns the radius minus the planetary diameter (alititude of the apoapsis)
+# force_x_N = thrust * cos(attitude_rad - alpha_pos + pi / 2) - force_drag * cos(acos()
+# velocity_ms = 0
 
 
-def vehicle_mass(mass_vehicle):
-    mass_vehicle = mass_vehicle - exhaust_flow * delta_time
 
 
-orbital_energy_kgm2s2 = 1 / 2 * mass_vehicle * velocity_ms ^ 2 - gravity_const * mass_planet /
-angular_momentum_kgm2s = 0
-reduced_mass_kg = mass_planet * mass_vehicle / (mass_planet + mass_vehicle)
-central_force_kgm3s2 = gravity_const * mass_planet * mass_vehicle
-eccentricity = sqrt(
-    1 + 2 * orbital_energy_kgm2s2 * angular_momentum_kgm2s ^ 2 / (reduced_mass_kg * central_force_kgm3s2 ^ 2)))
+#delta-V calc
 
+
+
+
+
+# eccentricity = sqrt(1 + 2 * orbital_energy_kgm2s2 * angular_momentum_kgm2s ^ 2 / (reduced_mass_kg * central_force_kgm3s2 ^ 2)))
 
 # record initial conditions
 
