@@ -1,3 +1,8 @@
+# Andrew Priest, Jan/27/2020
+# Ascent Profile Analyzer is a tool to determine the best flight plan for a rocket on Kerbal Space Program.
+# The tool uses Kerbal Physics to calculate the relevant free body forces (thrust, gravity, drag), and complete a path integral by simple time step methods.
+# The end result is an optimized flight plan that minimizes fuel consumption (or if you prefer, delta-V), when launching through an atmosphere and its aerodynamic drag.
+
 import math
 # import json
 from math import *
@@ -12,16 +17,19 @@ g_accel = 9.81  # m/s^2, acceleration due to gravity at the surface (should only
 # it is a known inaccuracy in this model, that if the vehicle attitude does not equal vehicle velocity direction, then the coefficient of drag will be different and could be significantly higher. It is possible to build a more accurate model of KSP drag,  but not a priority
 # this model assumes that the vehicle aerodynamics are stable & neutral, with no flipping, no lift.
 # this input is currently shown as a single stage launch, but a new set of inputs for additional stages will be necessary. This complication should use all the same math, but the main loop just breaks up which global constants to use
+# specific impulse can be complicated if there are multiple rocket types mixed together in the same stage. A separate simple tool may be necessary for users who don't know how to perform the arithmetic.
 engine_thrust = 10000  # N, maximum engine thrust, user set parameter from the rocket design
 drag_coefficient = 0.05  # m^2, drag coefficient "Cd * Area", user set parameter from the rocket design
 initial_mass_vehicle = 500  # kg, user set parameter from the rocket design
 initial_fuel_mass = 410  # kg, user set parameter from the rocket design
 specific_impulse = 340  # seconds, user set parameter from the rocket design
+# launch_heading can be a user parameter, when we are ready to take into account planetary rotation. We can reasonably assume a constant value for analysis purposes
 exhaust_flow = engine_thrust / (g_accel * specific_impulse)  # kg/s, derived parameter of the rocket design
 
 # these parameters need a user interface front end
 # prefer a drop down menu for selecting all the Kerbal planets, with preloaded values from a table.
 # prefer to have an additional option for custom inputs
+# current model does not consider planetary rotation and its effects on adding or subtracting to the tangential velocity at launch. This will require additional modification of the drag calcs too.
 radius_planet = 600000.00  # meters, user set parameter from the planet of origin (Kerbal is 600km)
 mass_planet = 5.2915158 * (10**22)  # kg, user set parameter from the planet of origin (Kerbal is 5.2915158e22 kg)
 initial_pressure = 101.3  # kPa, atmospheric initial pressure, user set parameter from the planet of origin
