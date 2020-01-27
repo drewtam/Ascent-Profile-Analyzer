@@ -2,18 +2,26 @@ import math
 # import json
 from math import *
 
+# these hard coded constants are proper
 gravity_const = 6.6743 * (10**-11)  # m^3/kg/s^2, universal gravitational constant
 gas_const = 0.287053  # kJ/kg/K, universal gas constant
 g_accel = 9.81  # m/s^2, acceleration due to gravity at the surface (should only be used for normalization)
 
-engine_thrust = 10000  # N, engine thrust, user set parameter from the rocket design
+# these parameters need a user interface front end
+# the drag coefficient is especially difficult, and should have a separate tool to help guide the user to determine the value
+# it is a known inaccuracy in this model, that if the vehicle attitude does not equal vehicle velocity direction, then the coefficient of drag will be different and could be significantly higher. It is possible to build a more accurate model of KSP drag,  but not a priority
+# this model assumes that the vehicle aerodynamics are stable & neutral, with no flipping, no lift.
+# this input is currently shown as a single stage launch, but a new set of inputs for additional stages will be necessary. This complication should use all the same math, but the main loop just breaks up which global constants to use
+engine_thrust = 10000  # N, maximum engine thrust, user set parameter from the rocket design
 drag_coefficient = 0.05  # m^2, drag coefficient "Cd * Area", user set parameter from the rocket design
-mass_vehicle = 500  # kg, user set parameter from the rocket design
+initial_mass_vehicle = 500  # kg, user set parameter from the rocket design
 initial_fuel_mass = 410  # kg, user set parameter from the rocket design
 specific_impulse = 340  # seconds, user set parameter from the rocket design
-initial_mass_vehicle = mass_vehicle  # kg, saving the original vehicle mass
 exhaust_flow = engine_thrust / (g_accel * specific_impulse)  # kg/s, derived parameter of the rocket design
 
+# these parameters need a user interface front end
+# prefer a drop down menu for selecting all the Kerbal planets, with preloaded values from a table.
+# prefer to have an additional option for custom inputs
 radius_planet = 600000.00  # meters, user set parameter from the planet of origin (Kerbal is 600km)
 mass_planet = 5.2915158 * (10**22)  # kg, user set parameter from the planet of origin (Kerbal is 5.2915158e22 kg)
 initial_pressure = 101.3  # kPa, atmospheric initial pressure, user set parameter from the planet of origin
@@ -23,32 +31,25 @@ top_of_atmosphere = 70000  # meters, highest altitude that atmosphere affects fl
 
 delta_time = 0.05  # seconds, time step, Controls simulation accuracy vs computational cost. ???maybe a user set parameter??? ???maybe dynamically generated based on velocity or some other error calc???
 
+# this is a temporary method, prefer to generate the optimal flight profile as an algorithm output that the user can copy
 flight_plan_altitude = [0, 3000, 8000, 12000, 20000, 80000]  # meters, flight plan altitude points, user set values for their launch plan
 flight_plan_attitude = [85, 72, 40, 20, 0, 0]  # degrees, flight plan attitude, user set values for their launch plan
 target_apoapsis = flight_plan_altitude[-1]  # meters, target apoapsis is assumed to the be the last element of the flight plan
 # need a check to verify flight plan is appropriately sized to each other, & the last element is above planet's top of atmosphere
 
 
-# output initial conditions
+# initial conditions
+# these should be the only global variables modified in main loop
+mass_vehicle = initial_mass_vehicle  # kg, vehicle mass
 current_time = 0.00  # seconds, simulation time, initialization
-
 x_pos = 0.0  # meters, cartesian position of the vehicle relative to planet center (origin), initialization
 y_pos = radius_planet  # meters, cartesian position of the vehicle relative to planet center (origin), initialization
-
-
-# alpha_pos = pi / 2  # radians, angular position of the vehicle relative to planet center (origin), initialization
-# radius_pos = radius_planet  # meters, radial position of the vehicle from planet center (origin), initialization
-
 x_velocity = 0.0  # m/s, cartesian velocity of the vehicle, initialization
 y_velocity = 0.0  # m/s, cartesian velocity of the vehicle, initialization
 
 
 def tangential_velocity():
     # m/s, returns velocity perpendicular to the position vector, assumes planar motion
-    # vx = x_velocity
-    # vy = y_velocity
-    # alpha = angular_position()
-    # return vx * sin(alpha) + vy * cos(alpha)
     v = velocity()
     vr = radial_velocity()
     return sqrt(v**2 - vr**2)
@@ -79,7 +80,6 @@ def attitude_deg():
 
 def attitude_rad():
     # radians, angle, calculate the attitude in radians from the flight plan in degrees
-    # a = altitude()  # calculate current altitude, to pass to flight plan function
     return attitude_deg() * pi / 180
 
 
@@ -124,13 +124,14 @@ def thrust():
 
 
 def velocity():
+    # m/s, returns the current scalar velocity
     vx = x_velocity
     vy = y_velocity
     return sqrt(vx**2 + vy**2)
 
 
 def orbital_energy():
-    # kg * m^2 / s^2, returns conserved orbital energy (euler? lagrangian? can't remember the technical term), requires vehicle mass, scalar velocity, and radial position
+    # kg * m^2 / s^2, returns conserved orbital energy (LaGrangian), requires vehicle mass, scalar velocity, and radial position
     m = mass_vehicle
     v = velocity()
     r = radial_position()
@@ -172,13 +173,13 @@ def eccentricity():
 
 
 def semi_major_axis():
-    # meters, returns the radius of the semi major axis of the vehicle orbit around the planet
+    # meters, returns the radius of the semi major axis of the vehicle orbit (ellipse) around the planet. Semi major axis is measured from the center of the ellipse, whereas the apoapsis is measured from the center of the planet.
     v = velocity()
     r = radial_position()
     return -gravity_const * mass_planet / (2 * (v**2 / 2 - gravity_const * mass_planet / r))
 
 
-def apoapsis_total():
+def apoapsis():
     # meters, returns the radius of the orbital apoapsis
     sma = semi_major_axis()
     ecc = eccentricity()
@@ -187,10 +188,10 @@ def apoapsis_total():
 
 def apoapsis_altitude():
     # meters, returns the radius minus the planetary diameter (altitude of the apoapsis)
-    return apoapsis_total() - radius_planet
+    return apoapsis() - radius_planet
 
 
-def periapsis_total():
+def periapsis():
     # meters, returns the radius of the orbital periapsis
     sma = semi_major_axis()
     ecc = eccentricity()
@@ -199,7 +200,7 @@ def periapsis_total():
 
 def periapsis_altitude():
     # meters, returns the radius minus the planetary diameter (altitude of the apoapsis)
-    return periapsis_total() - radius_planet
+    return periapsis() - radius_planet
 
 
 def apoapsis_velocity():
@@ -211,19 +212,19 @@ def apoapsis_velocity():
 
 def apo_gravity_accel():
     # m/s^2, returns the free fall acceleration due to gravity at apoapsis
-    apo = apoapsis_total()
+    apo = apoapsis()
     return gravity_const * mass_planet / (apo**2)
 
 
 def circular_orbital_apoapsis_velocity():
     # m/s, returns the required orbital velocity for a circular orbit at apoapsis
     aga = apo_gravity_accel()
-    apo = apoapsis_total()
+    apo = apoapsis()
     return sqrt(aga * apo)
 
 
 def velocity_deficit():
-    # m/s, returns the required velocity needed to circulize orbit at apoapsis
+    # m/s, returns the additional velocity needed to circularize orbit at apoapsis
     orbv = circular_orbital_apoapsis_velocity()
     apov = apoapsis_velocity()
     return orbv - apov
@@ -279,6 +280,16 @@ def delta_v():
     return math.log(m1/m2) * i * g
 
 
+# calculate the needed radial velocity needed to achieve the target height
+# calculate the needed tangential velocity to maintain orbit
+# calculate the deficit (target - actual) for each velocity component
+# calculate the change in deficit (deltaDV = sqrt(dvr^2 + dvt^2) from last step to current step
+# divide by change in deltaV (maybe not necessary)
+# iterate current step through several attitude angles which maximizes deficit reduction (possible sign error checking here, also needs to constrain between 90deg and 0deg)
+# record optimal attitude through flight; this probably doesn't need to be calculated every time step
+# average optimal attitude in 5km increments, output as separate flight plan recommendation
+
+
 def write_header():
     with open("flight_log.txt", "w") as file:
         file.write("time,s  mass,kg  attitude,deg  air_pressure,kPa  air_density,kg/m^3  drag_force,N  gravity_force,N  thrust,N  Fx,N  Fy,N  Vx,m/s  Vy,m/s  Vt,m/s  Vr,m/s  X,m  Y,m  Alpha,rad  "
@@ -288,23 +299,24 @@ def write_header():
 def write_data():
     with open("flight_log.txt", "a") as file:
         value_list = [current_time, mass_vehicle, attitude_deg(), air_pressure(), air_density(), drag_force(), gravity_force(), thrust(), x_force(), y_force(), x_velocity, y_velocity, tangential_velocity(), radial_velocity(), x_pos, y_pos, angular_position(),
-                      radial_position(), altitude(), apoapsis_total(), periapsis_total(), apoapsis_velocity(), velocity_deficit(), delta_v()]
+                      radial_position(), altitude(), apoapsis(), periapsis(), apoapsis_velocity(), velocity_deficit(), delta_v()]
         for i in range(len(value_list)):
             file.write(str(value_list[i]) + ", ")
         file.write("\n")
+# this is opening and closing the file every line, fix it!
+# when development is done, we don't need this output. It can be trimmed down, reduced to every few time steps, or removed entirely if we can self generate a flight profile plan
 
 
 # record initial conditions
 write_header()
-write_data()
 
 # Begin main loop (you can take the boy out of C, but can't take the C out of the boy)
 while (apoapsis_altitude() <= target_apoapsis or altitude() <= top_of_atmosphere) and fuel_remain() > 0:
     # increment time step & new states
+    write_data()
     current_time += delta_time
     mass_vehicle = new_vehicle_mass()
     x_velocity = x_velocity + x_force() / mass_vehicle * delta_time
     y_velocity = y_velocity + y_force() / mass_vehicle * delta_time
     x_pos = x_pos + x_velocity * delta_time
     y_pos = y_pos + y_velocity * delta_time
-    write_data()
