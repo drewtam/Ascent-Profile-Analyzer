@@ -6,13 +6,13 @@ gravity_const = 6.6743 * (10**-11)  # m^3/kg/s^2, universal gravitational consta
 gas_const = 0.287053  # kJ/kg/K, universal gas constant
 g_accel = 9.81  # m/s^2, acceleration due to gravity at the surface (should only be used for normalization)
 
-engine_thrust = 2000  # N, engine thrust, user set parameter from the rocket design
+engine_thrust = 10000  # N, engine thrust, user set parameter from the rocket design
 drag_coefficient = 0.05  # m^2, drag coefficient "Cd * Area", user set parameter from the rocket design
-mass_vehicle = 100  # kg, user set parameter from the rocket design
-exhaust_flow = 0.1  # kg/s, user set parameter from the rocket design
-initial_fuel_mass = 60  # kg, user set parameter from the rocket design
-specific_impulse = 300  # seconds, user set parameter from the rocket design
+mass_vehicle = 500  # kg, user set parameter from the rocket design
+initial_fuel_mass = 410  # kg, user set parameter from the rocket design
+specific_impulse = 340  # seconds, user set parameter from the rocket design
 initial_mass_vehicle = mass_vehicle  # kg, saving the original vehicle mass
+exhaust_flow = engine_thrust / (g_accel * specific_impulse)  # kg/s, derived parameter of the rocket design
 
 radius_planet = 600000.00  # meters, user set parameter from the planet of origin (Kerbal is 600km)
 mass_planet = 5.2915158 * (10**22)  # kg, user set parameter from the planet of origin (Kerbal is 5.2915158e22 kg)
@@ -21,9 +21,9 @@ scale_height = 5600  # meters, atmospheric pressure constant of KSP's atmosphere
 temperature = 293  # Kelvin, atmospheric temperature, user set parameter from the planet of origin (Kerbal is 20C at ground)
 top_of_atmosphere = 70000  # meters, highest altitude that atmosphere affects flight & drag, user set parameter from the planet of origin (Kerbal is 70km)
 
-delta_time = 0.1  # seconds, time step, Controls simulation accuracy vs computational cost. ???maybe a user set parameter??? ???maybe dynamically generated based on velocity or some other error calc???
+delta_time = 0.05  # seconds, time step, Controls simulation accuracy vs computational cost. ???maybe a user set parameter??? ???maybe dynamically generated based on velocity or some other error calc???
 
-flight_plan_altitude = [0, 3000, 12000, 20000, 30000, 80000]  # meters, flight plan altitude points, user set values for their launch plan
+flight_plan_altitude = [0, 3000, 8000, 12000, 20000, 80000]  # meters, flight plan altitude points, user set values for their launch plan
 flight_plan_attitude = [85, 72, 40, 20, 0, 0]  # degrees, flight plan attitude, user set values for their launch plan
 target_apoapsis = flight_plan_altitude[-1]  # meters, target apoapsis is assumed to the be the last element of the flight plan
 # need a check to verify flight plan is appropriately sized to each other, & the last element is above planet's top of atmosphere
@@ -45,10 +45,13 @@ y_velocity = 0.0  # m/s, cartesian velocity of the vehicle, initialization
 
 def tangential_velocity():
     # m/s, returns velocity perpendicular to the position vector, assumes planar motion
-    vx = x_velocity
-    vy = y_velocity
-    alpha = angular_position()
-    return vx * sin(alpha) + vy * cos(alpha)
+    # vx = x_velocity
+    # vy = y_velocity
+    # alpha = angular_position()
+    # return vx * sin(alpha) + vy * cos(alpha)
+    v = velocity()
+    vr = radial_velocity()
+    return sqrt(v**2 - vr**2)
 
 
 def radial_velocity():
@@ -165,7 +168,7 @@ def eccentricity():
     # unitless, returns the orbital eccentricity of the vehicle around the planet
     mr = reduced_mass()
     f = central_force()
-    return sqrt(1 + 2 * orbital_energy() * (angular_momentum())**2 / (mr * (f**2)))
+    return sqrt(1 + 2 * orbital_energy() * (angular_momentum()**2) / (mr * (f**2)))
 
 
 def semi_major_axis():
@@ -244,27 +247,27 @@ def gravity_force():
 def x_force():
     # Newtons, returns sum of forces in the cartesian x direction, assumes planar forces
     alpha = angular_position()
-    tfx = thrust() * cos(attitude_rad() - alpha + pi/2)  # thrust in the x direction
+    ftx = thrust() * cos(attitude_rad() - alpha + pi/2)  # thrust in the x direction
     v = velocity()
     if v == 0:
-        dfx = 0
+        fdx = 0
     else:
-        dfx = drag_force() * cos(acos(x_velocity / v))  # drag in the x direction
-    gfx = gravity_force() * cos(alpha)  # gravity in the x direction
-    return tfx - dfx - gfx
+        fdx = drag_force() * cos(acos(x_velocity / v))  # drag in the x direction
+    fgx = gravity_force() * cos(alpha)  # gravity in the x direction
+    return ftx - fdx - fgx
 
 
 def y_force():
     # Newtons, returns sum of forces in the cartesian y direction, assumes planar forces
     alpha = angular_position()
-    tfy = thrust() * sin(attitude_rad() - alpha + pi/2)  # thrust in the y direction
+    fty = thrust() * sin(attitude_rad() - alpha + pi/2)  # thrust in the y direction
     v = velocity()
     if v == 0:
-        dfy = 0
+        fdy = 0
     else:
-        dfy = drag_force() * sin(asin(y_velocity / v))  # drag in the y direction
-    gfy = gravity_force() * sin(alpha)  # gravity in the x direction
-    return tfy - dfy - gfy
+        fdy = drag_force() * sin(asin(y_velocity / v))  # drag in the y direction
+    fgy = gravity_force() * sin(alpha)  # gravity in the y direction
+    return fty - fdy - fgy
 
 
 def delta_v():
@@ -295,7 +298,7 @@ def write_data():
 write_header()
 write_data()
 
-# Begin main loop
+# Begin main loop (you can take the boy out of C, but can't take the C out of the boy)
 while (apoapsis_altitude() <= target_apoapsis or altitude() <= top_of_atmosphere) and fuel_remain() > 0:
     # increment time step & new states
     current_time += delta_time
