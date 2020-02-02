@@ -39,7 +39,7 @@ drag_coefficient = 0.05  # m^2, drag coefficient "Cd * Area", user set parameter
 initial_mass_vehicle = 500  # kg, user set parameter from the rocket design
 initial_fuel_mass = 410  # kg, user set parameter from the rocket design
 specific_impulse = 340  # seconds, user set parameter from the rocket design
-target_apoapsis = 80000  # meters, user set parameter from the mission goal !!!! Data quality requirement: must be greater than top of atmosphere!!!!!
+target_apoapsis = 80000.0  # meters, user set parameter from the mission goal !!!! Data quality requirement: must be greater than top of atmosphere!!!!!
 # add exception to exit program if target apoapsis <= top of atmosphere.
 # launch_heading can be a user parameter, when we are ready to take into account planetary rotation. We can reasonably assume a constant value for analysis purposes
 exhaust_flow = engine_thrust / (g_accel * specific_impulse)  # kg/s, derived parameter of the rocket design
@@ -48,7 +48,7 @@ exhaust_flow = engine_thrust / (g_accel * specific_impulse)  # kg/s, derived par
 # prefer a drop down menu for selecting all the Kerbal planets, with preloaded values from a table.
 # prefer to have an additional option for custom inputs
 # current model does not consider planetary rotation and its effects on adding or subtracting to the tangential velocity at launch. This will require additional modification of the drag calcs too.
-radius_planet = 600000.00  # meters, user set parameter from the planet of origin (Kerbal is 600km)
+radius_planet = 600000.0  # meters, user set parameter from the planet of origin (Kerbal is 600km)
 mass_planet = 5.2915158 * (10 ** 22)  # kg, user set parameter from the planet of origin (Kerbal is 5.2915158e22 kg)
 initial_pressure = 101.3  # kPa, atmospheric initial pressure, user set parameter from the planet of origin
 scale_height = 5600  # meters, atmospheric pressure constant of KSP's atmosphere model, user set parameter from the planet of origin
@@ -304,7 +304,7 @@ def delta_v(mass_vehicle):
 
 def height_potential(x, y):
     # m/s, returns the instantaneous radial velocity needed to achieve the target height (orbital altitude)
-    return sqrt(2 * gravity_const * mass_planet * (1 / radial_position(x, y) - 1 / target_apoapsis))
+    return sqrt(2 * gravity_const * mass_planet * abs(1 / radial_position(x, y) - 1 / target_apoapsis))
 
 
 def radial_velocity_error(x, y, vx, vy):
@@ -331,13 +331,13 @@ def write_data(x, y, vx, vy, mass_vehicle, current_time, flight_plan):
                       periapsis(x, y, vx, vy, mass_vehicle), apoapsis_velocity(x, y, vx, vy, mass_vehicle),
                       tangential_velocity_error(x, y, vx, vy, mass_vehicle),
                       delta_v(mass_vehicle)]
-    for j in range(len(value_list)):
-        file.write(str(value_list[j]) + ", ")
-    file.write("\n")
+        for j in range(len(value_list)):
+            file.write(str(value_list[j]) + ", ")
+        file.write("\n")
 # when development is done, we don't need this output. It can be trimmed down, reduced to every few time steps, or removed entirely if we can self generate a flight profile plan
 
 
-def flight_analysis(flight_plan, state):
+def flight_analysis(flight_plan, state, write):
     # returns the fuel consumption of the simulated flight plan
     x = state[0]
     y = state[1]
@@ -347,53 +347,61 @@ def flight_analysis(flight_plan, state):
     current_time = state[5]
 
     step_state = list(state)
-    # write_header()
-    # file = open("flight_log.txt", "a")
-    # while (radial_velocity_error() > 5 or tangential_velocity_error() > 5 or altitude() <= top_of_atmosphere) and fuel_remain() > 0:
+    if write is True:
+        write_header()
+        # file = open("flight_log.txt", "a")
     for t in range(int(initial_fuel_mass / exhaust_flow / delta_time)):
         # increment time step & new states
-        # write_data()
-        if altitude(x, y) < flight_plan[0][altitude_plan + 1]:
-            step_state = [x, y, vx, vy, mass_vehicle,
-                          current_time]  # saving the current state variable, so it doesn't have to be recalculated later
+        if write is True:
+            write_data(x, y, vx, vy, mass_vehicle, current_time, flight_plan)
+
+        next_alt = altitude_plan + 1
+        if next_alt > (len(flight_plan[0]) - 1):
+            next_alt = -1
+
+        if altitude(x, y) < flight_plan[0][next_alt]:
+            step_state = [x, y, vx, vy, mass_vehicle, current_time]  # saving the current state variable, so it doesn't have to be recalculated later
         current_time += delta_time
         mass_vehicle = new_vehicle_mass(x, y, vx, vy, mass_vehicle)
         vx = vx + x_force(x, y, vx, vy, mass_vehicle, flight_plan) / mass_vehicle * delta_time
         vy = vy + y_force(x, y, vx, vy, mass_vehicle, flight_plan) / mass_vehicle * delta_time
         x = x + vx * delta_time
         y = y + vy * delta_time
-        if fuel_remain(mass_vehicle) <= 0 or (
-                radial_velocity_error(x, y, vx, vy) < 5 and tangential_velocity_error(x, y, vx, vy,
-                                                                                      mass_vehicle) < 5 and altitude(x,
-                                                                                                                     y) >= top_of_atmosphere):
+        if fuel_remain(mass_vehicle) <= 0 or (radial_velocity_error(x, y, vx, vy) < 5 and tangential_velocity_error(x, y, vx, vy, mass_vehicle) < 5 and altitude(x, y) >= top_of_atmosphere):
             break
 
     # write_data(x, y, vx, vy, mass_vehicle)  # need to record the last update.
     # file.close()
-    fa = [fuel_remain(mass_vehicle), radial_velocity_error(x, y, vx, vy),
-          tangential_velocity_error(x, y, vx, vy, mass_vehicle), step_state]
+    fa = [fuel_remain(mass_vehicle), radial_velocity_error(x, y, vx, vy), tangential_velocity_error(x, y, vx, vy, mass_vehicle), step_state]
     return fa
 
 
 def seed_flight_plan():
     # returns a 2 column list of altitudes(m) and attitudes(deg). This is a seed to generate the flight profile as an optimization starting point
+    # alt = list(range(resolution_bottom+resolution_top))
+    # x = [[0 for i in range(row)] for j in range(col)]
     fp = []
+    fp_alt = []
     for altitudes in range(resolution_bottom):
-        fp[0][altitudes] = int(scale_height * math.log(
-            1 + altitudes / resolution_bottom))  # natural log calculates altitude for equal air pressure (air density) increments for the bottom half of the plan; these are not evenly spaced!
+        fp_alt.append(int(scale_height * math.log(1 + altitudes / resolution_bottom)))
+        # natural log calculates altitude for equal air pressure (air density) increments for the bottom half of the plan; these are not evenly spaced!
 
-    top_increment = int((target_apoapsis - fp[0][
-        resolution_bottom - 1]) / resolution_top)  # where ever altitude the bottom half of the plan left off (depending on its resolution), the distance to the target apoapsis is divided into equal distance increments
+    top_increment = int((target_apoapsis - fp_alt[resolution_bottom - 1]) / resolution_top)
+    # what ever altitude the bottom half of the plan left off (depending on its resolution), the distance to the target apoapsis is divided into equal distance increments
     for altitudes in range(resolution_bottom, resolution_bottom + resolution_top):
-        fp[0][altitudes] = fp[0][altitudes - 1] + top_increment
+        fp_alt.append(fp_alt[altitudes - 1] + top_increment + 1)
 
-    transition = -scale_height * math.log(
-        1 / 5)  # this transition point is an educated guess. the 1/5 of the atmospheric density could be parameterized...
-    for attitudes in range(len(fp[0])):
-        if fp[0][attitudes] < transition:
-            fp[1][attitudes] = 90
+    transition = -scale_height * math.log(1 / 5)
+    # this transition point is an educated guess. the 1/5 of the atmospheric density could be parameterized...
+
+    fp_att = []
+    for attitudes in range(len(fp_alt)):
+        if fp_alt[attitudes] < transition:
+            fp_att.append(90)
         else:
-            fp[1][attitudes] = 0
+            fp_att.append(0)
+    fp.append(fp_alt)
+    fp.append(fp_att)
     return fp
 
 
@@ -403,49 +411,57 @@ def seed_flight_plan():
 current_plan = []
 start = []
 fa1 = []
+for attempt in range(refinement):
+    for altitude_plan in range(resolution_bottom + resolution_top):
+        # cycles through every altitude/attitude pair, procedurally optimizing the attitude at each altitude range
+        if altitude_plan == 0:  # for the first time, set initial conditions, and seed the flight plan
+            if attempt == 0:
+                current_plan = list(seed_flight_plan())
+            start = [0.0, radius_planet, 0.0, 0.0, initial_mass_vehicle, 0.0]  # initial conditions
+            last_angle = 90
+        elif current_plan[1][altitude_plan - 1] > 10:  # last angle is used as a starting point for the attitude optimization sweep. Once the previous point in the flight plan has been optimized for a lower angle, we don't want the rocket turning back up. It should be a consistently reducing attitude over time & altitude
+            last_angle = current_plan[1][altitude_plan - 1]
+        else:
+            # constrain the last angle to 10deg positive attitude. Don't want the optimizer getting stuck at -10deg after one point selects it.
+            last_angle = 10
 
-for altitude_plan in range(resolution_bottom + resolution_top):
-    # cycles through every altitude/attitude pair, procedurally optimizing the attitude at each altitude range
-    if altitude_plan == 0:  # for the first time, set initial conditions, and seed the flight plan
-        current_plan = list(seed_flight_plan())
-        start = [0.0, radius_planet, 0.0, 0.0, initial_mass_vehicle, 0.0]  # initial conditions
-        last_angle = 90
-    elif current_plan[1][altitude_plan - 1] > 10:  # last angle is used as a starting point for the attitude optimization sweep. Once the previous point in the flight plan has been optimized for a lower angle, we don't want the rocket turning back up. It should be a consistently reducing attitude over time & altitude
-        # constrain the last angle to 10deg positive attitude. Don't want the optimizer getting stuck at -10deg after one point selects it.
-        last_angle = current_plan[1][altitude_plan - 1]
-    else:
-        last_angle = 10
-
-    for theta in range(last_angle, -5, -5):
-        # for a given altitude range, sweep through and find the optimum attitude at this point which yields the best flight performance
-        if theta == last_angle:
-            current_plan[1][altitude_plan] = theta
+        for theta in range(last_angle, -5, -5):
+            # for a given altitude range, sweep through and find the optimum attitude at this point which yields the best flight performance
+            if theta == last_angle:
+                current_plan[1][altitude_plan] = theta
+                # analyze the flight plan
+                fa1 = list(flight_analysis(current_plan, start, False))
+            # modify flight_plan[1][i]
+            current_plan[1][altitude_plan] -= 5
             # analyze the flight plan
-            fa1 = list(flight_analysis(current_plan, start))
-        # modify flight_plan[1][i]
-        current_plan[1][altitude_plan] -= 5
-        # analyze the flight plan
-        fa2 = list(flight_analysis(current_plan, start))
+            fa2 = list(flight_analysis(current_plan, start, False))
 
-        # if fa2 is better --> modify the same element again, incrementing another angle
-        # if fa2 is worse/same --> revert the change, save the state (and start all analysis from there), go to next element
-        if 0 < fa2[0] <= fa1[0]:
-            # analyzing by fuel remaining is preferred, but is only valid if both analysis have fuel left
-            current_plan[1][altitude_plan] += 5
-            start = list(fa1[3])
-            break
-        elif fa1[0] <= 0 or fa2[0] <= 0:
-            # if either analysis ran out of fuel, then compare using the velocity error method as backup
-            fa1_v_error = fa1[1] + fa1[2]
-            fa2_v_error = fa2[1] + fa2[2]
-            if fa2_v_error >= fa1_v_error:
+            # if fa2 is better --> modify the same element again, incrementing another angle
+            # if fa2 is worse/same --> revert the change, save the state (and start all analysis from there), go to next element
+            if 0 < fa2[0] <= fa1[0]:
+                # analyzing by fuel remaining is preferred, but is only valid if both analysis have fuel left
                 current_plan[1][altitude_plan] += 5
                 start = list(fa1[3])
                 break
-        elif theta == -5:
-            # if fa2 is still the best when the iteration gets to -5 deg, fa2 will have analyzed a -10deg attitude. Don't go further than that, assume optimization and move to next element
-            start = list(fa2[3])
-            break
-        else:
-            # if fa2 has the better performance, store its result as the new baseline. No need to rerun that flight plan.
-            fa1 = list(fa2)
+            elif fa1[0] <= 0 or fa2[0] <= 0:
+                # if either analysis ran out of fuel, then compare using the velocity error method as backup
+                fa1_v_error = abs(fa1[1]) + abs(fa1[2])
+                fa2_v_error = abs(fa2[1]) + abs(fa2[2])
+                if fa2_v_error >= fa1_v_error:
+                    current_plan[1][altitude_plan] += 5
+                    start = list(fa1[3])
+                    break
+            elif theta == -5:
+                # if fa2 is still the best when the iteration gets to -5 deg, fa2 will have analyzed a -10deg attitude. Don't go further than that, assume optimization and move to next element
+                start = list(fa2[3])
+                break
+            else:
+                # if fa2 has the better performance, store its result as the new baseline. No need to rerun that flight plan.
+                fa1 = list(fa2)
+    if attempt == (refinement - 1):
+        start = [0.0, radius_planet, 0.0, 0.0, initial_mass_vehicle, 0.0]  # initial conditions
+        flight_analysis(current_plan, start, True)
+        with open("flight_plan.txt", "w") as plan_file:
+            plan_file.write(
+                "altitude,m  attitude,deg \n")
+            plan_file.write(str(current_plan))
