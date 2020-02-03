@@ -56,7 +56,7 @@ temperature = 293  # Kelvin, atmospheric temperature, user set parameter from th
 top_of_atmosphere = 70000  # meters, highest altitude that atmosphere affects flight & drag, user set parameter from the planet of origin (Kerbal is 70km)
 
 delta_time = 0.1  # seconds, time step, Controls simulation accuracy vs computational cost. ???maybe a user set parameter??? ???maybe dynamically generated based on velocity or some other error calc???
-refinement = 3  # the number of times to execute the full optimization algorithm. Controls simulation accuracy vs computational cost. ???maybe a user set parameter??? ???maybe dynamically generated based on velocity or some other error calc???
+refinement = 10  # the number of times to execute the full optimization algorithm. Controls simulation accuracy vs computational cost. ???maybe a user set parameter??? ???maybe dynamically generated based on velocity or some other error calc???
 resolution_bottom = 20  # the number of altitude points to divide the flight plan in the bottom thick part of atmosphere. The atmosphere is divided by equal increments of pressure (density).
 # By increasing the resolution, the last element will be higher in the atmosphere; as each division will be a small density change.
 resolution_top = 10  # the number of altitude points to divide the flight plan in the upper atmosphere. This starts where the bottom resolution left off, and divides the distance to top of atmosphere by these equal points.
@@ -100,7 +100,11 @@ def attitude_rad(x, y, flight_plan):
 
 def air_pressure(x, y):
     # kPa, returns the air pressure from current altitude
-    return initial_pressure * exp(-(altitude(x, y)) / scale_height)
+    alt = altitude(x, y)
+    if alt > top_of_atmosphere:
+        return 0
+    else:
+        return initial_pressure * exp(-alt / scale_height)
 
 
 def air_density(x, y):
@@ -134,8 +138,8 @@ def fuel_remain(mass_vehicle):
 
 
 def thrust(x, y, vx, vy, mass_vehicle):
-    # Newtons, returns the engine thrust. Turns engine thrust on/off based on calculated apoapsis. Engine will burn until target apoapsis is expected, prevents overshoot.
-    if apoapsis_altitude(x, y, vx, vy, mass_vehicle) >= target_apoapsis or fuel_remain(mass_vehicle) <= 0:
+    # Newtons, returns the engine thrust. Turns engine thrust on/off based on velocity error. Engine will burn until target velocity is expected, prevents overshoot.
+    if apoapsis_error(x, y, vx, vy, mass_vehicle) < 100 or fuel_remain(mass_vehicle) <= 0:
         return 0
     else:
         return engine_thrust
@@ -187,23 +191,25 @@ def eccentricity(x, y, vx, vy, mass_vehicle):
     # unitless, returns the orbital eccentricity of the vehicle around the planet
     mr = reduced_mass(mass_vehicle)
     f = central_force(mass_vehicle)
-    return sqrt(
-        1 + 2 * orbital_energy(x, y, vx, vy, mass_vehicle) * (angular_momentum(x, y, vx, vy, mass_vehicle) ** 2) / (
-                    mr * (f ** 2)))
+    return sqrt(1 + 2 * orbital_energy(x, y, vx, vy, mass_vehicle) * (angular_momentum(x, y, vx, vy, mass_vehicle) ** 2) / (mr * (f ** 2)))
 
 
 def semi_major_axis(x, y, vx, vy):
     # meters, returns the radius of the semi major axis of the vehicle orbit (ellipse) around the planet. Semi major axis is measured from the center of the ellipse, whereas the apoapsis is measured from the center of the planet.
     v = velocity(vx, vy)
     r = radial_position(x, y)
-    return -gravity_const * mass_planet / (2 * (v ** 2 / 2 - gravity_const * mass_planet / r))
+    sma = -gravity_const * mass_planet / (2 * (v ** 2 / 2 - gravity_const * mass_planet / r))
+    return sma
 
 
 def apoapsis(x, y, vx, vy, mass_vehicle):
     # meters, returns the radius of the orbital apoapsis
     sma = semi_major_axis(x, y, vx, vy)
     ecc = eccentricity(x, y, vx, vy, mass_vehicle)
-    return sma * (1 + abs(ecc))
+    # if sma < 0:
+    #    print(x, y, vx, vy, mass_vehicle)
+    apo = sma * (1 + abs(ecc))
+    return apo
 
 
 def apoapsis_altitude(x, y, vx, vy, mass_vehicle):
@@ -233,6 +239,8 @@ def apoapsis_velocity(x, y, vx, vy, mass_vehicle):
 def apo_gravity_accel(x, y, vx, vy, mass_vehicle):
     # m/s^2, returns the free fall acceleration due to gravity at apoapsis
     apo = apoapsis(x, y, vx, vy, mass_vehicle)
+    if apo < 0:
+        return 0
     return gravity_const * mass_planet / (apo ** 2)
 
 
@@ -240,14 +248,41 @@ def circular_orbital_apoapsis_velocity(x, y, vx, vy, mass_vehicle):
     # m/s, returns the required orbital velocity for a circular orbit at apoapsis
     aga = apo_gravity_accel(x, y, vx, vy, mass_vehicle)
     apo = apoapsis(x, y, vx, vy, mass_vehicle)
+    if apo < 0:
+        return 0
     return sqrt(aga * apo)
 
 
 def tangential_velocity_error(x, y, vx, vy, mass_vehicle):
     # m/s, returns the additional velocity needed to circularize orbit at apoapsis
-    orbv = circular_orbital_apoapsis_velocity(x, y, vx, vy, mass_vehicle)
-    apov = apoapsis_velocity(x, y, vx, vy, mass_vehicle)
-    return orbv - apov
+    # orbv = circular_orbital_apoapsis_velocity(x, y, vx, vy, mass_vehicle)
+    orbv = sqrt(gravity_const * mass_planet / (target_apoapsis + radius_planet))  # tangential velocity needed for circular orbit at target altitude
+    apov = apoapsis_velocity(x, y, vx, vy, mass_vehicle)  # tangential velocity at apoapsis (by definition, apoapsis has no radial velocity :) )
+    tve = orbv - apov
+    return tve
+
+
+def height_potential(x, y):
+    # m/s, returns the instantaneous radial velocity needed to achieve the target height (orbital altitude)
+    return sqrt(2 * gravity_const * mass_planet * abs(1 / radial_position(x, y) - 1 / (target_apoapsis + radius_planet)))
+
+
+def radial_velocity_error(x, y, vx, vy):
+    # m/s, returns the additional radial velocity needed to attain the target altitude
+    rve = height_potential(x, y) - radial_velocity(x, y, vx, vy)
+    return rve
+
+
+def apoapsis_error(x, y, vx, vy, mass_vehicle):
+    # meters, returns the error between calculated apoapsis and target apoapsis
+    ae = (target_apoapsis + radius_planet) - apoapsis(x, y, vx, vy, mass_vehicle)
+    return ae
+
+
+def fuel_burn(change_v, mass_vehicle):
+    # kg, returns the fuel mass burn needed to burn deliver the target velocity change
+    dm = mass_vehicle - mass_vehicle / (math.exp(change_v / (specific_impulse * g_accel)))
+    return dm
 
 
 def drag_force(x, y, vx, vy):
@@ -282,8 +317,7 @@ def x_force(x, y, vx, vy, mass_vehicle, flight_plan):
 def y_force(x, y, vx, vy, mass_vehicle, flight_plan):
     # Newtons, returns sum of forces in the cartesian y direction, assumes planar forces
     alpha = angular_position(x, y)
-    fty = thrust(x, y, vx, vy, mass_vehicle) * sin(
-        attitude_rad(x, y, flight_plan) - alpha + pi / 2)  # thrust in the y direction
+    fty = thrust(x, y, vx, vy, mass_vehicle) * sin(attitude_rad(x, y, flight_plan) - alpha + pi / 2)  # thrust in the y direction
     v = velocity(vx, vy)
     if v == 0:
         fdy = 0
@@ -302,21 +336,11 @@ def delta_v(mass_vehicle):
     return math.log(m1 / m2) * isp * g
 
 
-def height_potential(x, y):
-    # m/s, returns the instantaneous radial velocity needed to achieve the target height (orbital altitude)
-    return sqrt(2 * gravity_const * mass_planet * abs(1 / radial_position(x, y) - 1 / target_apoapsis))
-
-
-def radial_velocity_error(x, y, vx, vy):
-    # m/s, returns the additional radial velocity needed to attain the target altitude
-    return height_potential(x, y) - radial_velocity(x, y, vx, vy)
-
-
 def write_header():
     with open("flight_log.txt", "w") as file:
-        file.write(
-            "time,s  mass,kg  attitude,deg  air_pressure,kPa  air_density,kg/m^3  drag_force,N  gravity_force,N  thrust,N  Fx,N  Fy,N  Vx,m/s  Vy,m/s  Vt,m/s  Vr,m/s  X,m  Y,m  Alpha,rad  "
-            "Radial,m  Altitude,m  Apoapsis,m  Periapsis,m  Apoapsis_Velocity,m/s  Remaining_Orbital_Velocity,m/s  Delta-V,m/s  \n")
+        # file.write("time,s  mass,kg  attitude,deg  air_pressure,kPa  air_density,kg/m^3  drag_force,N  gravity_force,N  thrust,N  Fx,N  Fy,N  Vx,m/s  Vy,m/s  Vt,m/s  Vr,m/s  X,m  Y,m  Alpha,rad  "
+        #    "Radial,m  Altitude,m  Apoapsis,m  Periapsis,m  Apoapsis_Velocity,m/s  Remaining_Orbital_Velocity,m/s  Delta-V,m/s  \n")
+        file.write("")
 
 
 def write_data(x, y, vx, vy, mass_vehicle, current_time, flight_plan):
@@ -332,7 +356,7 @@ def write_data(x, y, vx, vy, mass_vehicle, current_time, flight_plan):
                       tangential_velocity_error(x, y, vx, vy, mass_vehicle),
                       delta_v(mass_vehicle)]
         for j in range(len(value_list)):
-            file.write(str(value_list[j]) + ", ")
+            file.write(str(value_list[j]) + " ")
         file.write("\n")
 # when development is done, we don't need this output. It can be trimmed down, reduced to every few time steps, or removed entirely if we can self generate a flight profile plan
 
@@ -349,30 +373,31 @@ def flight_analysis(flight_plan, state, write):
     step_state = list(state)
     if write is True:
         write_header()
-        # file = open("flight_log.txt", "a")
-    for t in range(int(initial_fuel_mass / exhaust_flow / delta_time)):
+    for t in range(int(initial_fuel_mass / exhaust_flow / delta_time*2)):
         # increment time step & new states
+        # print(apoapsis(x, y, vx, vy, mass_vehicle))
         if write is True:
             write_data(x, y, vx, vy, mass_vehicle, current_time, flight_plan)
 
         next_alt = altitude_plan + 1
         if next_alt > (len(flight_plan[0]) - 1):
             next_alt = -1
-
         if altitude(x, y) < flight_plan[0][next_alt]:
             step_state = [x, y, vx, vy, mass_vehicle, current_time]  # saving the current state variable, so it doesn't have to be recalculated later
+
         current_time += delta_time
         mass_vehicle = new_vehicle_mass(x, y, vx, vy, mass_vehicle)
         vx = vx + x_force(x, y, vx, vy, mass_vehicle, flight_plan) / mass_vehicle * delta_time
         vy = vy + y_force(x, y, vx, vy, mass_vehicle, flight_plan) / mass_vehicle * delta_time
         x = x + vx * delta_time
         y = y + vy * delta_time
-        if fuel_remain(mass_vehicle) <= 0 or (radial_velocity_error(x, y, vx, vy) < 5 and tangential_velocity_error(x, y, vx, vy, mass_vehicle) < 5 and altitude(x, y) >= top_of_atmosphere):
+        if fuel_remain(mass_vehicle) < 0 or (radial_velocity_error(x, y, vx, vy) < 5 and tangential_velocity_error(x, y, vx, vy, mass_vehicle) < 5 and altitude(x, y) >= top_of_atmosphere):
             break
 
     # write_data(x, y, vx, vy, mass_vehicle)  # need to record the last update.
     # file.close()
-    fa = [fuel_remain(mass_vehicle), radial_velocity_error(x, y, vx, vy), tangential_velocity_error(x, y, vx, vy, mass_vehicle), step_state]
+    final_state = [x, y, vx, vy, mass_vehicle, current_time]
+    fa = [fuel_remain(mass_vehicle), apoapsis_error(x, y, vx, vy, mass_vehicle), tangential_velocity_error(x, y, vx, vy, mass_vehicle), step_state, final_state]
     return fa
 
 
@@ -383,7 +408,7 @@ def seed_flight_plan():
     fp = []
     fp_alt = []
     for altitudes in range(resolution_bottom):
-        fp_alt.append(int(scale_height * math.log(1 + altitudes / resolution_bottom)))
+        fp_alt.append(int(scale_height * math.log(resolution_bottom / (resolution_bottom - altitudes))))
         # natural log calculates altitude for equal air pressure (air density) increments for the bottom half of the plan; these are not evenly spaced!
 
     top_increment = int((target_apoapsis - fp_alt[resolution_bottom - 1]) / resolution_top)
@@ -405,6 +430,40 @@ def seed_flight_plan():
     return fp
 
 
+def compare_flight(flight1, flight2):
+    # returns a value 1 or 2, compares two flight profiles and selects which performed better, flight 1 or flight 2.
+    # Each input is a list conforming to the following format:
+    # flight analysis = [fuel_remain(mass_vehicle), apoapsis_error(x, y, vx, vy, mass_vehicle), tangential_velocity_error(x, y, vx, vy, mass_vehicle), step_state, final_state]
+    # step_state and final_state have the format:
+    # final_state = [x, y, vx, vy, mass_vehicle, current_time]
+    # if both flights fail to meet apoapsis target, select the highest flight as first priority
+    if flight1[1] > flight2[1] > 200:
+        return 2
+    elif flight2[1] > flight1[1] > 200:
+        return 1
+    # if one flight achieves target apoapsis, and the other doesn't, select the flight which achieves
+    elif flight1[1] <= 200 and flight2[1] > 200:
+        return 1
+    elif flight2[1] <= 200 and flight1[1] > 200:
+        return 2
+    # if both flights achieve target apoapsis, then select based on which will have the most fuel remaining
+    # fuel remaining is calculated by the flight analysis (which cuts off once space is reached), minus the additional burn needed at apoapsis to achieve circular orbit
+    # negative fuel remaining is okay for this analysis, least deficit is still a valid determinant of the best flight plan
+    elif flight1[1] <= 200 and flight2[1] <= 200:
+        fuel_remain1 = flight1[0] - fuel_burn(flight1[2], flight1[4][4])
+        fuel_remain2 = flight2[0] - fuel_burn(flight2[2], flight2[4][4])
+        if fuel_remain1 >= fuel_remain2:
+            return 1
+        else:
+            return 2
+    # hopefully this else is never selected, because the above should cover all cases... but good to have a last ditch catch
+    else:
+        print("Function Error: compare_flight()")
+        print(flight1[1])
+        print(flight2[1])
+        return 1
+
+
 # Begin main loop
 
 # declare some globals that will be defined later...
@@ -412,6 +471,7 @@ current_plan = []
 start = []
 fa1 = []
 for attempt in range(refinement):
+    print("Attempt #" + str(attempt))
     for altitude_plan in range(resolution_bottom + resolution_top):
         # cycles through every altitude/attitude pair, procedurally optimizing the attitude at each altitude range
         if altitude_plan == 0:  # for the first time, set initial conditions, and seed the flight plan
@@ -419,49 +479,36 @@ for attempt in range(refinement):
                 current_plan = list(seed_flight_plan())
             start = [0.0, radius_planet, 0.0, 0.0, initial_mass_vehicle, 0.0]  # initial conditions
             last_angle = 90
-        elif current_plan[1][altitude_plan - 1] > 10:  # last angle is used as a starting point for the attitude optimization sweep. Once the previous point in the flight plan has been optimized for a lower angle, we don't want the rocket turning back up. It should be a consistently reducing attitude over time & altitude
+        elif current_plan[1][altitude_plan - 1] > 20:  # last angle is used as a starting point for the attitude optimization sweep. Once the previous point in the flight plan has been optimized for a lower angle, we don't want the rocket turning back up. It should be a consistently reducing attitude over time & altitude
             last_angle = current_plan[1][altitude_plan - 1]
         else:
-            # constrain the last angle to 10deg positive attitude. Don't want the optimizer getting stuck at -10deg after one point selects it.
-            last_angle = 10
-
+            # constrain the last angle to 20deg positive attitude. Will allow it to nose up if needed.
+            last_angle = 20
+        print(str(current_plan[1]))
         for theta in range(last_angle, -5, -5):
             # for a given altitude range, sweep through and find the optimum attitude at this point which yields the best flight performance
-            if theta == last_angle:
-                current_plan[1][altitude_plan] = theta
-                # analyze the flight plan
-                fa1 = list(flight_analysis(current_plan, start, False))
+            # print(theta)
+            # if theta == last_angle:
+            theta1 = theta
+            current_plan[1][altitude_plan] = theta1
+            # analyze the flight plan
+            fa1 = list(flight_analysis(current_plan, start, False))
             # modify flight_plan[1][i]
-            current_plan[1][altitude_plan] -= 5
+            theta2 = theta-5
+            current_plan[1][altitude_plan] = theta2
             # analyze the flight plan
             fa2 = list(flight_analysis(current_plan, start, False))
+            # compare the flight plans
+            result = compare_flight(fa1, fa2)
 
-            # if fa2 is better --> modify the same element again, incrementing another angle
-            # if fa2 is worse/same --> revert the change, save the state (and start all analysis from there), go to next element
-            if 0 < fa2[0] <= fa1[0]:
-                # analyzing by fuel remaining is preferred, but is only valid if both analysis have fuel left
-                current_plan[1][altitude_plan] += 5
-                start = list(fa1[3])
+            if result == 1:
+                current_plan[1][altitude_plan] = theta1
                 break
-            elif fa1[0] <= 0 or fa2[0] <= 0:
-                # if either analysis ran out of fuel, then compare using the velocity error method as backup
-                fa1_v_error = abs(fa1[1]) + abs(fa1[2])
-                fa2_v_error = abs(fa2[1]) + abs(fa2[2])
-                if fa2_v_error >= fa1_v_error:
-                    current_plan[1][altitude_plan] += 5
-                    start = list(fa1[3])
-                    break
-            elif theta == -5:
-                # if fa2 is still the best when the iteration gets to -5 deg, fa2 will have analyzed a -10deg attitude. Don't go further than that, assume optimization and move to next element
-                start = list(fa2[3])
-                break
-            else:
-                # if fa2 has the better performance, store its result as the new baseline. No need to rerun that flight plan.
-                fa1 = list(fa2)
+            # there should be an else statement here, to set variable for theta2 as the new baseline to compare against, but wait until the process works correctly to improve calc resource
+    # test if the current_plan is the same final result as the last plan (previous attempt). If true, then break. The resolution will set maximum runs, but we can stop once the optimization has stabilized.
     if attempt == (refinement - 1):
         start = [0.0, radius_planet, 0.0, 0.0, initial_mass_vehicle, 0.0]  # initial conditions
         flight_analysis(current_plan, start, True)
         with open("flight_plan.txt", "w") as plan_file:
-            plan_file.write(
-                "altitude,m  attitude,deg \n")
+            plan_file.write("altitude,m  attitude,deg \n")
             plan_file.write(str(current_plan))
